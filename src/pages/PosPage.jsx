@@ -37,7 +37,6 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
   }
 
   async function handleScan(barcode) {
-    // Keep camera open, but ignore repeated detections briefly.
     if (scanning || checkoutLoading) return;
 
     setScanning(true);
@@ -60,7 +59,6 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
 
       setScanError(msg);
     } finally {
-      // Camera stays active; this only prevents duplicate readings.
       window.setTimeout(() => {
         setScanning(false);
       }, 1200);
@@ -95,22 +93,36 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
     setCheckoutError('');
 
     try {
-      const res = await checkout(cart, 'Main Branch');
+      // New backend expects: { items: [{ productId, quantity, unitPrice }], paymentMethod }
+      const items = cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.price
+      }));
+
+      const payload = {
+        items,
+        paymentMethod: 'cash' // or add a UI to choose cash/card/gcash/paymaya
+      };
+
+      const res = await checkout(payload);
 
       if (!res.success) {
         setCheckoutError(res.error || 'Checkout failed');
         return;
       }
 
+      // Clear cart only on success
       setCart([]);
 
       onCheckoutSuccess?.({
-        sale: res.sale,
-        movements: res.movements
+        sale: res.sale
       });
     } catch (err) {
       setCheckoutError(
-        err?.response?.data?.error || 'Checkout failed'
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          'Checkout failed'
       );
     } finally {
       setCheckoutLoading(false);
@@ -148,7 +160,6 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
         </div>
       </div>
 
-      {/* Camera stays on after scanning. It closes only during checkout or from Stop camera. */}
       <BarcodeScanner
         onScan={handleScan}
         disabled={checkoutLoading}

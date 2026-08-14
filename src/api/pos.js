@@ -56,17 +56,39 @@ export async function scanBarcode(barcode, quantity = 1) {
   }
 }
 
-/*
-  Checkout is not implemented in the backend files you pasted.
+// Checkout payload shape expected by backend:
+// {
+//   items: [
+//     { productId: string, quantity: number, unitPrice: number }
+//   ],
+//   paymentMethod: 'cash' | 'card' | 'gcash' | 'paymaya'
+// }
+export async function checkout(payload) {
+  if (
+    !payload ||
+    !Array.isArray(payload.items) ||
+    payload.items.length === 0
+  ) {
+    return {
+      success: false,
+      error: 'Cart is empty'
+    };
+  }
 
-  This placeholder prevents a false `/api/pos/checkout` 404.
-  To make checkout subtract stock and save a sale/receipt, the backend needs
-  a Sale model and a POST endpoint, for example POST /api/pos/checkout.
-*/
-export async function checkout() {
-  return {
-    success: false,
-    error:
-      'Checkout has not been added to the backend yet. Product scanning is ready.'
-  };
+  try {
+    const response = await client.post('/sales', payload);
+
+    return {
+      success: true,
+      sale: response.data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Checkout failed'
+    };
+  }
 }
