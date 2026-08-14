@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import BarcodeInput from '../components/BarcodeInput.jsx';
+import CartTable from '../components/CartTable.jsx';
+import CheckoutSummary from '../components/CheckoutSummary.jsx';
 import { scanBarcode, checkout } from '../api/pos';
 
 export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
