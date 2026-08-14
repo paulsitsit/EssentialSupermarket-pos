@@ -1,76 +1,53 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function BarcodeScanner({ onScan, disabled }) {
+  const containerRef = useRef(null);
   const scannerRef = useRef(null);
-  const html5QrCodeRef = useRef(null);
   const [error, setError] = useState('');
-  const [scanning, setScanning] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (disabled) {
-      stopScanner();
-      return;
-    }
+    if (disabled || !containerRef.current || initialized) return;
 
-    if (started) {
-      startScanner();
+    try {
+      const scanner = new Html5QrcodeScanner(
+        'barcode-scanner-container',
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          useBarCodeDetectorIfSupported: true
+        },
+        false // showLessUI = false
+      );
+
+      scannerRef.current = scanner;
+
+      scanner.render(
+        (decodedText) => {
+          // Success: a barcode/QR was scanned
+          onScan?.(decodedText);
+        },
+        (errorMessage) => {
+          // Scan errors are normal; ignore or log if needed
+          // console.log('Scan error:', errorMessage);
+        }
+      );
+
+      setInitialized(true);
+    } catch (err) {
+      console.error('Failed to init scanner:', err);
+      setError('Camera access failed. Make sure you allow camera permission and use HTTPS.');
     }
 
     return () => {
-      stopScanner();
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear();
+        } catch {}
+      }
     };
-  }, [disabled, started]);
-
-  async function startScanner() {
-    if (!scannerRef.current || scanning) return;
-
-    try {
-      const html5QrCode = new Html5Qrcode('barcode-scanner-container');
-      html5QrCodeRef.current = html5QrCode;
-
-      await html5QrCode.render(
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
-        {
-          facingMode: 'environment'
-        }
-      );
-
-      setScanning(true);
-      setError('');
-
-      html5QrCode.start(
-        { facingMode: 'environment' },
-        {
-          qrboxFunction: function (success) {
-            onScan?.(success);
-          }
-        },
-        (error) => {
-          // ignore frequent scan errors
-        }
-      );
-    } catch (err) {
-      console.error('Failed to start scanner:', err);
-      setError('Camera access failed. Make sure you allow camera permission and use HTTPS.');
-      setScanning(false);
-    }
-  }
-
-  function stopScanner() {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-      html5QrCodeRef.current.stop().catch(console.error);
-    }
-    setScanning(false);
-  }
-
-  function handleStart() {
-    setStarted(true);
-  }
+  }, [disabled, initialized, onScan]);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -78,42 +55,26 @@ export default function BarcodeScanner({ onScan, disabled }) {
         Scan barcode / QR code
       </div>
 
-      {!started ? (
-        <div>
-          <button className="btn" onClick={handleStart} disabled={disabled}>
-            Start camera
-          </button>
-          <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>
-            Click to allow camera access. Use HTTPS.
-          </div>
+      {error && (
+        <div style={{ marginBottom: 8, color: '#b00020', fontSize: 14 }}>
+          {error}
         </div>
-      ) : (
-        <>
-          <div
-            id="barcode-scanner-container"
-            ref={scannerRef}
-            style={{
-              width: '100%',
-              maxWidth: 400,
-              margin: '0 auto',
-              background: '#000',
-              borderRadius: 8,
-              overflow: 'hidden'
-            }}
-          />
+      )}
 
-          {error && (
-            <div style={{ marginTop: 8, color: '#b00020', fontSize: 14 }}>
-              {error}
-            </div>
-          )}
+      <div
+        id="barcode-scanner-container"
+        ref={containerRef}
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          margin: '0 auto'
+        }}
+      />
 
-          {!disabled && !scanning && !error && (
-            <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>
-              Starting camera…
-            </div>
-          )}
-        </>
+      {!initialized && !error && (
+        <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>
+          Initializing camera…
+        </div>
       )}
     </div>
   );
