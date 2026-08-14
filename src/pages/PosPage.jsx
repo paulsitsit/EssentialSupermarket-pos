@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import BarcodeInput from '../components/BarcodeInput.jsx';
+import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import CartTable from '../components/CartTable.jsx';
 import CheckoutSummary from '../components/CheckoutSummary.jsx';
 import { scanBarcode, checkout } from '../api/pos';
@@ -81,7 +81,6 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
 
       setCart([]);
 
-      // Pass sale data up so App can navigate to receipt
       onCheckoutSuccess?.({
         sale: res.sale,
         movements: res.movements
@@ -123,7 +122,7 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
         </div>
       </div>
 
-      <BarcodeInput onScan={handleScan} disabled={scanning || checkoutLoading} />
+      <BarcodeScanner onScan={handleScan} disabled={scanning || checkoutLoading} />
 
       {scanError && (
         <div className="card">
