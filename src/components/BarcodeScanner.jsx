@@ -3,7 +3,11 @@ import { Html5Qrcode } from 'html5-qrcode';
 
 export default function BarcodeScanner({ onScan, disabled = false }) {
   const scannerRef = useRef(null);
+  const startingRef = useRef(false);
+  const stoppingRef = useRef(false);
+  const mountedRef = useRef(true);
   const onScanRef = useRef(onScan);
+
   const [started, setStarted] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
@@ -13,24 +17,33 @@ export default function BarcodeScanner({ onScan, disabled = false }) {
   }, [onScan]);
 
   useEffect(() => {
-    if (disabled) {
-      stopCamera();
-    }
+    mountedRef.current = true;
 
     return () => {
-      stopCamera();
+      mountedRef.current = false;
+      void stopCamera();
     };
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      void stopCamera();
+    }
   }, [disabled]);
 
   async function startCamera() {
-    if (disabled || scanning) return;
+    if (disabled || startingRef.current || scanning || scannerRef.current) {
+      return;
+    }
 
+    startingRef.current = true;
+    stoppingRef.current = false;
     setError('');
 
-    try {
-      const scanner = new Html5Qrcode('barcode-reader');
-      scannerRef.current = scanner;
+    const scanner = new Html5Qrcode('barcode-reader');
+    scannerRef.current = scanner;
 
+    try {
       await scanner.start(
         { facingMode: 'environment' },
         {
@@ -42,40 +55,83 @@ export default function BarcodeScanner({ onScan, disabled = false }) {
           onScanRef.current?.(decodedText);
         },
         () => {
-          // Normal while the camera searches for a code.
+          // Normal while searching for a barcode.
         }
       );
+
+      if (!mountedRef.current || stoppingRef.current || disabled) {
+        await stopScannerInstance(scanner);
+        return;
+      }
 
       setStarted(true);
       setScanning(true);
     } catch (err) {
       console.error('Failed to start scanner:', err);
-      setError(
-        'Camera could not start. Allow camera permission and open this page using HTTPS.'
-      );
-      setStarted(false);
-      setScanning(false);
+
+      if (mountedRef.current && !stoppingRef.current) {
+        setError(
+          'Camera could not start. Allow camera permission and use HTTPS.'
+        );
+        setStarted(false);
+        setScanning(false);
+      }
+
       scannerRef.current = null;
+    } finally {
+      startingRef.current = false;
     }
   }
 
-  async function stopCamera() {
-    const scanner = scannerRef.current;
-
+  async function stopScannerInstance(scanner) {
     if (!scanner) return;
 
     try {
       if (scanner.isScanning) {
         await scanner.stop();
       }
+    } catch (err) {
+      const message = String(err?.message || err);
+
+      if (!message.includes('Cannot transition')) {
+        console.warn('Error stopping scanner:', err);
+      }
+    }
+
+    try {
       await scanner.clear();
     } catch (err) {
-      console.warn('Error stopping scanner:', err);
-    } finally {
+      console.warn('Error clearing scanner:', err);
+    }
+  }
+
+  async function stopCamera() {
+    if (stoppingRef.current) return;
+
+    stoppingRef.current = true;
+    const scanner = scannerRef.current;
+
+    if (!scanner) {
+      if (mountedRef.current) {
+        setStarted(false);
+        setScanning(false);
+      }
+      stoppingRef.current = false;
+      return;
+    }
+
+    await stopScannerInstance(scanner);
+
+    if (scannerRef.current === scanner) {
       scannerRef.current = null;
+    }
+
+    if (mountedRef.current) {
       setStarted(false);
       setScanning(false);
     }
+
+    stoppingRef.current = false;
   }
 
   return (
@@ -89,9 +145,9 @@ export default function BarcodeScanner({ onScan, disabled = false }) {
           type="button"
           className="btn"
           onClick={startCamera}
-          disabled={disabled}
+          disabled={disabled || startingRef.current}
         >
-          Start camera
+          {startingRef.current ? 'Starting camera…' : 'Start camera'}
         </button>
       )}
 
@@ -99,7 +155,7 @@ export default function BarcodeScanner({ onScan, disabled = false }) {
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={stopCamera}
+          onClick={() => void stopCamera()}
           disabled={disabled}
           style={{ marginBottom: 12 }}
         >
@@ -120,16 +176,12 @@ export default function BarcodeScanner({ onScan, disabled = false }) {
 
       {started && scanning && (
         <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>
-          Point your phone camera at a barcode or QR code.
+          Point your camera at a barcode or QR code.
         </div>
       )}
 
       {error && (
-        <div
-          className="error"
-          style={{ marginTop: 10 }}
-          role="alert"
-        >
+        <div className="error" style={{ marginTop: 10 }} role="alert">
           {error}
         </div>
       )}
