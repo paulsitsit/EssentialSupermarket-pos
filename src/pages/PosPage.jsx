@@ -16,6 +16,17 @@ function getAudioContext() {
   return new AudioContextClass();
 }
 
+function closeAudioContext(audioContext) {
+  window.setTimeout(() => {
+    if (
+      audioContext &&
+      audioContext.state !== 'closed'
+    ) {
+      audioContext.close().catch(() => {});
+    }
+  }, 400);
+}
+
 function playSuccessBeep() {
   try {
     const audioContext = getAudioContext();
@@ -24,42 +35,52 @@ function playSuccessBeep() {
       return;
     }
 
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
+    const now = audioContext.currentTime;
 
-    oscillator.type = 'sine';
+    /*
+     * Short, sharp POS scanner-style beep.
+     * Square wave makes it sound closer to a store scanner
+     * than a soft sine-wave notification sound.
+     */
+    oscillator.type = 'square';
 
     oscillator.frequency.setValueAtTime(
-      1050,
-      audioContext.currentTime
+      1800,
+      now
     );
 
     gainNode.gain.setValueAtTime(
       0.0001,
-      audioContext.currentTime
+      now
     );
 
     gainNode.gain.exponentialRampToValueAtTime(
-      0.16,
-      audioContext.currentTime + 0.01
+      0.32,
+      now + 0.003
     );
 
     gainNode.gain.exponentialRampToValueAtTime(
       0.0001,
-      audioContext.currentTime + 0.12
+      now + 0.09
     );
 
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
 
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.13);
+    oscillator.start(now);
+    oscillator.stop(now + 0.095);
 
     oscillator.addEventListener('ended', () => {
-      audioContext.close();
+      closeAudioContext(audioContext);
     });
   } catch {
-    // A scan must still work if the device/browser blocks audio.
+    // Never stop a successful POS scan when sound is unavailable.
   }
 }
 
@@ -71,52 +92,57 @@ function playErrorBeep() {
       return;
     }
 
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+
     const gainNode = audioContext.createGain();
     const firstTone = audioContext.createOscillator();
     const secondTone = audioContext.createOscillator();
+    const now = audioContext.currentTime;
 
     gainNode.gain.setValueAtTime(
       0.0001,
-      audioContext.currentTime
+      now
     );
 
     gainNode.gain.exponentialRampToValueAtTime(
-      0.12,
-      audioContext.currentTime + 0.01
+      0.16,
+      now + 0.005
     );
 
     gainNode.gain.exponentialRampToValueAtTime(
       0.0001,
-      audioContext.currentTime + 0.27
+      now + 0.28
     );
 
     firstTone.type = 'square';
     firstTone.frequency.setValueAtTime(
-      260,
-      audioContext.currentTime
+      350,
+      now
     );
 
     secondTone.type = 'square';
     secondTone.frequency.setValueAtTime(
-      190,
-      audioContext.currentTime + 0.14
+      230,
+      now + 0.14
     );
 
     firstTone.connect(gainNode);
     secondTone.connect(gainNode);
     gainNode.connect(audioContext.destination);
 
-    firstTone.start();
-    firstTone.stop(audioContext.currentTime + 0.1);
+    firstTone.start(now);
+    firstTone.stop(now + 0.1);
 
-    secondTone.start(audioContext.currentTime + 0.14);
-    secondTone.stop(audioContext.currentTime + 0.26);
+    secondTone.start(now + 0.14);
+    secondTone.stop(now + 0.25);
 
     secondTone.addEventListener('ended', () => {
-      audioContext.close();
+      closeAudioContext(audioContext);
     });
   } catch {
-    // Keep POS scanning functional if audio is unavailable.
+    // Keep the POS functional even if browser audio is unavailable.
   }
 }
 
@@ -175,13 +201,17 @@ export default function PosPage({
 
       if (!result.success) {
         playErrorBeep();
+
         setScanError(
           result.error || 'Product not found'
         );
+
         return;
       }
 
+      // Beep only after the barcode is validated and in-stock.
       playSuccessBeep();
+
       addToCart(
         result.product,
         result.scannedQuantity
@@ -199,7 +229,7 @@ export default function PosPage({
     } finally {
       window.setTimeout(() => {
         setScanning(false);
-      }, 1200);
+      }, 700);
     }
   }
 
@@ -249,18 +279,18 @@ export default function PosPage({
         unitPrice: item.price
       }));
 
-      const payload = {
+      const result = await checkout({
         items,
         paymentMethod: 'cash'
-      };
-
-      const result = await checkout(payload);
+      });
 
       if (!result.success) {
         playErrorBeep();
+
         setCheckoutError(
           result.error || 'Checkout failed'
         );
+
         return;
       }
 
