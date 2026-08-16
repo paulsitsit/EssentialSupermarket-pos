@@ -1,9 +1,130 @@
 import { useState } from 'react';
+
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import CartTable from '../components/CartTable.jsx';
 import { scanBarcode, checkout } from '../api/pos';
 
-export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
+function getAudioContext() {
+  const AudioContextClass =
+    window.AudioContext ||
+    window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  return new AudioContextClass();
+}
+
+function playSuccessBeep() {
+  try {
+    const audioContext = getAudioContext();
+
+    if (!audioContext) {
+      return;
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = 'sine';
+
+    oscillator.frequency.setValueAtTime(
+      1050,
+      audioContext.currentTime
+    );
+
+    gainNode.gain.setValueAtTime(
+      0.0001,
+      audioContext.currentTime
+    );
+
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.16,
+      audioContext.currentTime + 0.01
+    );
+
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.0001,
+      audioContext.currentTime + 0.12
+    );
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.13);
+
+    oscillator.addEventListener('ended', () => {
+      audioContext.close();
+    });
+  } catch {
+    // A scan must still work if the device/browser blocks audio.
+  }
+}
+
+function playErrorBeep() {
+  try {
+    const audioContext = getAudioContext();
+
+    if (!audioContext) {
+      return;
+    }
+
+    const gainNode = audioContext.createGain();
+    const firstTone = audioContext.createOscillator();
+    const secondTone = audioContext.createOscillator();
+
+    gainNode.gain.setValueAtTime(
+      0.0001,
+      audioContext.currentTime
+    );
+
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.12,
+      audioContext.currentTime + 0.01
+    );
+
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.0001,
+      audioContext.currentTime + 0.27
+    );
+
+    firstTone.type = 'square';
+    firstTone.frequency.setValueAtTime(
+      260,
+      audioContext.currentTime
+    );
+
+    secondTone.type = 'square';
+    secondTone.frequency.setValueAtTime(
+      190,
+      audioContext.currentTime + 0.14
+    );
+
+    firstTone.connect(gainNode);
+    secondTone.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    firstTone.start();
+    firstTone.stop(audioContext.currentTime + 0.1);
+
+    secondTone.start(audioContext.currentTime + 0.14);
+    secondTone.stop(audioContext.currentTime + 0.26);
+
+    secondTone.addEventListener('ended', () => {
+      audioContext.close();
+    });
+  } catch {
+    // Keep POS scanning functional if audio is unavailable.
+  }
+}
+
+export default function PosPage({
+  user,
+  onLogout,
+  onCheckoutSuccess
+}) {
   const [cart, setCart] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
@@ -11,19 +132,24 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
   const [checkoutError, setCheckoutError] = useState('');
 
   function addToCart(product, scannedQty) {
-    setCart((prev) => {
-      const existing = prev.find((p) => p.productId === product.id);
+    setCart(previousCart => {
+      const existing = previousCart.find(
+        item => item.productId === product.id
+      );
 
       if (existing) {
-        return prev.map((p) =>
-          p.productId === product.id
-            ? { ...p, quantity: p.quantity + scannedQty }
-            : p
+        return previousCart.map(item =>
+          item.productId === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + scannedQty
+              }
+            : item
         );
       }
 
       return [
-        ...prev,
+        ...previousCart,
         {
           productId: product.id,
           name: product.name,
@@ -37,27 +163,39 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
   }
 
   async function handleScan(barcode) {
-    if (scanning || checkoutLoading) return;
+    if (scanning || checkoutLoading) {
+      return;
+    }
 
     setScanning(true);
     setScanError('');
 
     try {
-      const res = await scanBarcode(barcode, 1);
+      const result = await scanBarcode(barcode, 1);
 
-      if (!res.success) {
-        setScanError(res.error || 'Product not found');
+      if (!result.success) {
+        playErrorBeep();
+        setScanError(
+          result.error || 'Product not found'
+        );
         return;
       }
 
-      addToCart(res.product, res.scannedQuantity);
+      playSuccessBeep();
+      addToCart(
+        result.product,
+        result.scannedQuantity
+      );
     } catch (err) {
-      const msg =
+      const message =
         err?.response?.status === 404
           ? 'Product not found'
-          : err?.response?.data?.error || 'Scan failed';
+          : err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            'Scan failed';
 
-      setScanError(msg);
+      playErrorBeep();
+      setScanError(message);
     } finally {
       window.setTimeout(() => {
         setScanning(false);
@@ -68,33 +206,44 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
   function updateQuantity(productId, quantity) {
     const safeQuantity = Number(quantity);
 
-    if (!Number.isFinite(safeQuantity) || safeQuantity <= 0) {
+    if (
+      !Number.isFinite(safeQuantity) ||
+      safeQuantity <= 0
+    ) {
       removeItem(productId);
       return;
     }
 
-    setCart((prev) =>
-      prev.map((item) =>
+    setCart(previousCart =>
+      previousCart.map(item =>
         item.productId === productId
-          ? { ...item, quantity: safeQuantity }
+          ? {
+              ...item,
+              quantity: safeQuantity
+            }
           : item
       )
     );
   }
 
   function removeItem(productId) {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
+    setCart(previousCart =>
+      previousCart.filter(
+        item => item.productId !== productId
+      )
+    );
   }
 
   async function handleCheckout() {
-    if (cart.length === 0 || checkoutLoading) return;
+    if (cart.length === 0 || checkoutLoading) {
+      return;
+    }
 
     setCheckoutLoading(true);
     setCheckoutError('');
 
     try {
-      // New backend expects: { items: [{ productId, quantity, unitPrice }], paymentMethod }
-      const items = cart.map((item) => ({
+      const items = cart.map(item => ({
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: item.price
@@ -102,23 +251,27 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
 
       const payload = {
         items,
-        paymentMethod: 'cash' // or add a UI to choose cash/card/gcash/paymaya
+        paymentMethod: 'cash'
       };
 
-      const res = await checkout(payload);
+      const result = await checkout(payload);
 
-      if (!res.success) {
-        setCheckoutError(res.error || 'Checkout failed');
+      if (!result.success) {
+        playErrorBeep();
+        setCheckoutError(
+          result.error || 'Checkout failed'
+        );
         return;
       }
 
-      // Clear cart only on success
       setCart([]);
 
       onCheckoutSuccess?.({
-        sale: res.sale
+        sale: result.sale
       });
     } catch (err) {
+      playErrorBeep();
+
       setCheckoutError(
         err?.response?.data?.message ||
           err?.response?.data?.error ||
@@ -129,7 +282,9 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
     }
   }
 
-  const canCheckout = cart.length > 0 && !checkoutLoading;
+  const canCheckout =
+    cart.length > 0 &&
+    !checkoutLoading;
 
   return (
     <div className="container">
@@ -142,17 +297,33 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
           alignItems: 'center'
         }}
       >
-        <h1 style={{ fontSize: 18 }}>Cashier POS</h1>
+        <h1 style={{ fontSize: 18 }}>
+          Cashier POS
+        </h1>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ fontSize: 13, color: '#555' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center'
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              color: '#555'
+            }}
+          >
             {user?.name || user?.email}
           </div>
 
           <button
             type="button"
             className="btn btn-secondary"
-            style={{ padding: '6px 10px', fontSize: 13 }}
+            style={{
+              padding: '6px 10px',
+              fontSize: 13
+            }}
             onClick={onLogout}
           >
             Logout
@@ -162,12 +333,14 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
 
       <BarcodeScanner
         onScan={handleScan}
-        disabled={checkoutLoading}
+        disabled={checkoutLoading || scanning}
       />
 
       {scanError && (
         <div className="card">
-          <div className="error">{scanError}</div>
+          <div className="error">
+            {scanError}
+          </div>
         </div>
       )}
 
@@ -185,12 +358,21 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
             disabled={!canCheckout}
             onClick={handleCheckout}
           >
-            {checkoutLoading ? 'Processing…' : 'PROCEED'}
+            {checkoutLoading
+              ? 'Processing…'
+              : 'PROCEED'}
           </button>
 
           {!canCheckout && (
-            <span style={{ color: '#666', fontSize: 14 }}>
-              {cart.length === 0 ? 'Cart is empty' : ''}
+            <span
+              style={{
+                color: '#666',
+                fontSize: 14
+              }}
+            >
+              {cart.length === 0
+                ? 'Cart is empty'
+                : ''}
             </span>
           )}
         </div>
@@ -198,7 +380,9 @@ export default function PosPage({ user, onLogout, onCheckoutSuccess }) {
 
       {checkoutError && (
         <div className="card">
-          <div className="error">{checkoutError}</div>
+          <div className="error">
+            {checkoutError}
+          </div>
         </div>
       )}
     </div>
