@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import CartTable from '../components/CartTable.jsx';
@@ -152,7 +152,7 @@ export default function PosPage({
   onCheckoutSuccess
 }) {
   const [cart, setCart] = useState([]);
-  const [scanning, setScanning] = useState(false);
+  const scanningRef = useRef(false);
   const [scanError, setScanError] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
@@ -189,11 +189,11 @@ export default function PosPage({
   }
 
   async function handleScan(barcode) {
-    if (scanning || checkoutLoading) {
+    if (scanningRef.current || checkoutLoading) {
       return;
     }
 
-    setScanning(true);
+    scanningRef.current = true;
     setScanError('');
 
     try {
@@ -228,7 +228,7 @@ export default function PosPage({
       setScanError(message);
     } finally {
       window.setTimeout(() => {
-        setScanning(false);
+        scanningRef.current = false;
       }, 700);
     }
   }
@@ -363,7 +363,7 @@ export default function PosPage({
 
       <BarcodeScanner
         onScan={handleScan}
-        disabled={checkoutLoading || scanning}
+        disabled={checkoutLoading}
       />
 
       {scanError && (
