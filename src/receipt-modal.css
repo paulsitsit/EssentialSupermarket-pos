@@ -319,3 +319,10 @@
     gap: 10px;
   }
 }
+.receipt-store-logo {
+  display: block;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 10px;
+  object-fit: contain;
+}

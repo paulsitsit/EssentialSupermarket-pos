@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Printer, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import '../receipt-modal.css';
 
@@ -83,276 +83,257 @@ export default function ReceiptModal({
     totalAmount: sale.totalAmount
   });
 
-  function handlePrint() {
-    const popup = window.open(
-      '',
-      '_blank',
-      'width=420,height=760'
-    );
+  function handleDownload() {
+  const printableRows = items
+    .map(
+      item => `
+        <tr>
+          <td>${escapeHtml(item.name || 'Product')}</td>
+          <td class="center">${Number(item.quantity || 0)}</td>
+          <td class="right">${formatPeso(item.subtotal)}</td>
+        </tr>
+      `
+    )
+    .join('');
 
-    if (!popup) {
-      window.alert(
-        'The browser blocked the print window. Please allow popups for this POS site, then try again.'
-      );
-      return;
-    }
+  const logoUrl = `${window.location.origin}/essential-supermarket-logo.png`;
 
-    const printableRows = items
-      .map(
-        item => `
-          <tr>
-            <td>${escapeHtml(item.name || 'Product')}</td>
-            <td class="center">${Number(item.quantity || 0)}</td>
-            <td class="right">${formatPeso(item.subtotal)}</td>
-          </tr>
-        `
-      )
-      .join('');
+  const receiptHtml = `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Receipt ${escapeHtml(receiptNumber)}</title>
 
-    const qrImageUrl =
-      document.querySelector(
-        '.receipt-qr svg'
-      )?.outerHTML || '';
+        <style>
+          * {
+            box-sizing: border-box;
+          }
 
-    popup.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Receipt ${escapeHtml(receiptNumber)}</title>
+          body {
+            width: 300px;
+            margin: 0 auto;
+            padding: 18px 12px;
+            color: #111827;
+            background: #ffffff;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+          }
 
-          <style>
-            * {
-              box-sizing: border-box;
-            }
+          .centered {
+            text-align: center;
+          }
 
-            body {
-              width: 300px;
-              margin: 0 auto;
-              padding: 18px 12px;
-              color: #111827;
-              font-family: "Courier New", monospace;
-              font-size: 12px;
-            }
+          .logo {
+            display: block;
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 8px;
+            object-fit: contain;
+          }
 
-            .centered {
-              text-align: center;
-            }
+          h1 {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            font-size: 17px;
+          }
 
-            .logo {
-              display: inline-flex;
-              width: 42px;
-              height: 42px;
-              align-items: center;
-              justify-content: center;
-              margin-bottom: 8px;
-              border-radius: 12px;
-              background: #15803d;
-              color: white;
-              font-family: Arial, sans-serif;
-              font-size: 15px;
-              font-weight: 800;
-            }
+          .branch {
+            margin: 4px 0 18px;
+            color: #4b5563;
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+          }
 
-            h1 {
-              margin: 0;
-              font-family: Arial, sans-serif;
-              font-size: 17px;
-            }
+          .receipt-number {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding: 9px;
+            background: #f0fdf4;
+            color: #166534;
+            font-size: 11px;
+          }
 
-            .branch {
-              margin: 4px 0 18px;
-              color: #4b5563;
-              font-family: Arial, sans-serif;
-              font-size: 11px;
-            }
+          .receipt-number strong {
+            overflow-wrap: anywhere;
+            text-align: right;
+          }
 
-            .receipt-number {
-              display: flex;
-              justify-content: space-between;
-              gap: 8px;
-              margin-bottom: 14px;
-              padding: 9px;
-              background: #f0fdf4;
-              color: #166534;
-              font-size: 11px;
-            }
+          .meta p,
+          .summary p {
+            margin: 4px 0;
+          }
 
-            .receipt-number strong {
-              overflow-wrap: anywhere;
-              text-align: right;
-            }
+          .rule {
+            margin: 15px 0;
+            border-top: 1px dashed #64748b;
+          }
 
-            .meta p,
-            .summary p {
-              margin: 4px 0;
-            }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
 
-            .rule {
-              margin: 15px 0;
-              border-top: 1px dashed #64748b;
-            }
+          th {
+            padding-bottom: 7px;
+            border-bottom: 1px solid #9ca3af;
+            color: #4b5563;
+            font-size: 10px;
+            text-align: left;
+            text-transform: uppercase;
+          }
 
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              table-layout: fixed;
-            }
+          td {
+            padding: 8px 0;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+          }
 
-            th {
-              padding-bottom: 7px;
-              border-bottom: 1px solid #9ca3af;
-              color: #4b5563;
-              font-size: 10px;
-              text-align: left;
-              text-transform: uppercase;
-            }
+          th:first-child,
+          td:first-child {
+            width: 58%;
+          }
 
-            td {
-              padding: 8px 0;
-              vertical-align: top;
-              overflow-wrap: anywhere;
-            }
+          th:nth-child(2),
+          td:nth-child(2) {
+            width: 14%;
+          }
 
-            th:first-child,
-            td:first-child {
-              width: 58%;
-            }
+          th:nth-child(3),
+          td:nth-child(3) {
+            width: 28%;
+          }
 
-            th:nth-child(2),
-            td:nth-child(2) {
-              width: 14%;
-            }
+          .center {
+            text-align: center;
+          }
 
-            th:nth-child(3),
-            td:nth-child(3) {
-              width: 28%;
-            }
+          .right {
+            text-align: right;
+          }
 
-            .center {
-              text-align: center;
-            }
+          .total {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 2px solid #111827;
+            font-family: Arial, sans-serif;
+            font-size: 17px;
+            font-weight: 800;
+          }
 
-            .right {
-              text-align: right;
-            }
+          .total strong {
+            color: #15803d;
+          }
 
-            .total {
-              display: flex;
-              justify-content: space-between;
-              margin-top: 15px;
-              padding-top: 12px;
-              border-top: 2px solid #111827;
-              font-family: Arial, sans-serif;
-              font-size: 17px;
-              font-weight: 800;
-            }
+          .qr {
+            margin: 20px auto 8px;
+            text-align: center;
+          }
 
-            .total strong {
-              color: #15803d;
-            }
+          .qr svg {
+            width: 128px;
+            height: 128px;
+          }
 
-            .qr {
-              margin: 20px auto 8px;
-              text-align: center;
-            }
+          .footer {
+            margin-top: 18px;
+            color: #4b5563;
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            text-align: center;
+          }
+        </style>
+      </head>
 
-            .qr svg {
-              width: 128px;
-              height: 128px;
-            }
+      <body>
+        <div class="centered">
+          <img
+            class="logo"
+            src="${logoUrl}"
+            alt="Essential Supermarket logo"
+          />
 
-            .qr small {
-              display: block;
-              margin-top: 8px;
-              color: #4b5563;
-              font-family: Arial, sans-serif;
-              font-size: 9px;
-              overflow-wrap: anywhere;
-            }
+          <h1>Essential Supermarket</h1>
+          <p class="branch">Main Branch</p>
+        </div>
 
-            .footer {
-              margin-top: 18px;
-              color: #4b5563;
-              font-family: Arial, sans-serif;
-              font-size: 10px;
-              text-align: center;
-            }
+        <div class="receipt-number">
+          <span>Receipt No.</span>
+          <strong>${escapeHtml(receiptNumber)}</strong>
+        </div>
 
-            @media print {
-              body {
-                padding: 0;
-              }
-            }
-          </style>
-        </head>
+        <div class="meta">
+          <p>
+            <strong>Date:</strong>
+            ${escapeHtml(formatDate(sale.createdAt))}
+          </p>
 
-        <body>
-          <div class="centered">
-            <div class="logo">ES</div>
-            <h1>Essential Supermarket</h1>
-            <p class="branch">Main Branch</p>
-          </div>
+          <p>
+            <strong>Cashier:</strong>
+            ${escapeHtml(cashierName)}
+          </p>
+        </div>
 
-          <div class="receipt-number">
-            <span>Receipt No.</span>
-            <strong>${escapeHtml(receiptNumber)}</strong>
-          </div>
+        <div class="rule"></div>
 
-          <div class="meta">
-            <p><strong>Date:</strong> ${escapeHtml(formatDate(sale.createdAt))}</p>
-            <p><strong>Cashier:</strong> ${escapeHtml(cashierName)}</p>
-          </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th class="center">Qty</th>
+              <th class="right">Total</th>
+            </tr>
+          </thead>
 
-          <div class="rule"></div>
+          <tbody>
+            ${printableRows}
+          </tbody>
+        </table>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th class="center">Qty</th>
-                <th class="right">Total</th>
-              </tr>
-            </thead>
+        <div class="rule"></div>
 
-            <tbody>
-              ${printableRows}
-            </tbody>
-          </table>
+        <div class="summary">
+          <p><strong>Items:</strong> ${totalItems}</p>
+          <p><strong>Payment:</strong> ${escapeHtml(paymentMethod)}</p>
+        </div>
 
-          <div class="rule"></div>
+        <div class="total">
+          <span>TOTAL</span>
+          <strong>${formatPeso(sale.totalAmount)}</strong>
+        </div>
 
-          <div class="summary">
-            <p><strong>Items:</strong> ${totalItems}</p>
-            <p><strong>Payment:</strong> ${escapeHtml(paymentMethod)}</p>
-          </div>
+        <div class="footer">
+          <p><strong>Thank you for shopping with us.</strong></p>
+          <p>Keep this receipt for returns or exchanges.</p>
+        </div>
+      </body>
+    </html>
+  `;
 
-          <div class="total">
-            <span>TOTAL</span>
-            <strong>${formatPeso(sale.totalAmount)}</strong>
-          </div>
+  const blob = new Blob(
+    [receiptHtml],
+    { type: 'text/html;charset=utf-8' }
+  );
 
-          <div class="qr">
-            ${qrImageUrl}
-            <small>Scan for return lookup</small>
-          </div>
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
 
-          <div class="footer">
-            <p><strong>Thank you for shopping with us.</strong></p>
-            <p>Keep this receipt for returns or exchanges.</p>
-          </div>
+  link.href = downloadUrl;
+  link.download = `receipt-${receiptNumber}.html`;
 
-          <script>
-            window.onload = () => {
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 
-    popup.document.close();
-  }
+  window.setTimeout(() => {
+    URL.revokeObjectURL(downloadUrl);
+  }, 1000);
+}
 
   return (
     <div
@@ -391,9 +372,12 @@ export default function ReceiptModal({
 
         <div className="receipt-paper">
           <div className="receipt-store">
-            <div className="receipt-store-mark">
+            <img
+              className="receipt-store-logo"
+              src="/essential-supermarket-logo.png"
+              alt="Essential Supermarket logo"
               ES
-            </div>
+            />
 
             <h1>Essential Supermarket</h1>
             <p>Main Branch</p>
@@ -497,14 +481,13 @@ export default function ReceiptModal({
           </footer>
         </div>
 
-        <footer className="receipt-actions">
+        <footer className="Download-actions">
           <button
             type="button"
             className="receipt-button receipt-button-secondary"
-            onClick={handlePrint}
+            onClick={handleDownload}
           >
-            <Printer size={17} />
-            Print receipt
+            Download receipt
           </button>
 
           <button
