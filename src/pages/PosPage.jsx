@@ -75,7 +75,7 @@ function playSuccessBeep() {
       closeAudioContext(audioContext);
     });
   } catch {
-    // Do not interrupt the POS workflow if browser sound is unavailable.
+    // Browser audio must never block a successful POS transaction.
   }
 }
 
@@ -137,7 +137,7 @@ function playErrorBeep() {
       closeAudioContext(audioContext);
     });
   } catch {
-    // Do not interrupt the POS workflow if browser sound is unavailable.
+    // Browser audio must never block a failed POS transaction.
   }
 }
 
@@ -167,7 +167,7 @@ export default function PosPage({
                 ...item,
                 quantity:
                   Number(item.quantity) +
-                  Number(scannedQty)
+                  Number(scannedQty || 1)
               }
             : item
         );
@@ -219,15 +219,13 @@ export default function PosPage({
         result.scannedQuantity || 1
       );
     } catch (err) {
-      const message =
-        err?.response?.status === 404
-          ? 'Product not found'
-          : err?.response?.data?.message ||
-            err?.response?.data?.error ||
-            'Scan failed';
-
       playErrorBeep();
-      setScanError(message);
+
+      setScanError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          'Scan failed'
+      );
     } finally {
       window.setTimeout(() => {
         scanningRef.current = false;
@@ -302,11 +300,21 @@ export default function PosPage({
 
       const sale = result.sale;
 
-      if (!sale.receiptNumber) {
+      if (
+        !sale.receiptNumber ||
+        !Array.isArray(sale.items) ||
+        sale.items.length === 0 ||
+        Number(sale.totalAmount) <= 0
+      ) {
+        console.error(
+          'Incomplete receipt data received:',
+          sale
+        );
+
         playErrorBeep();
 
         setCheckoutError(
-          'The sale was completed, but the server did not return a receipt number. Please contact the administrator before processing another sale.'
+          'Sale completed, but receipt information was incomplete. Please check the transaction in the inventory system before processing another sale.'
         );
 
         return;
@@ -326,7 +334,6 @@ export default function PosPage({
       };
 
       setCart([]);
-
       setLastSale(completedSale);
 
       onCheckoutSuccess?.({
@@ -416,7 +423,10 @@ export default function PosPage({
 
       <BarcodeScanner
         onScan={handleScan}
-        disabled={checkoutLoading || Boolean(lastSale)}
+        disabled={
+          checkoutLoading ||
+          Boolean(lastSale)
+        }
       />
 
       {scanError && (
