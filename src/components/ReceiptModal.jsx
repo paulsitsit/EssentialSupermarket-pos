@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { Printer, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import '../receipt-modal.css';
 
 function formatPeso(value) {
@@ -75,11 +77,17 @@ export default function ReceiptModal({
     sale.paymentMethod || 'cash'
   ).toUpperCase();
 
+  const qrValue = JSON.stringify({
+    receiptNumber,
+    saleId: sale._id,
+    totalAmount: sale.totalAmount
+  });
+
   function handlePrint() {
     const popup = window.open(
       '',
       '_blank',
-      'width=420,height=720'
+      'width=420,height=760'
     );
 
     if (!popup) {
@@ -101,12 +109,18 @@ export default function ReceiptModal({
       )
       .join('');
 
+    const qrImageUrl =
+      document.querySelector(
+        '.receipt-qr svg'
+      )?.outerHTML || '';
+
     popup.document.write(`
       <!doctype html>
       <html>
         <head>
           <meta charset="utf-8" />
           <title>Receipt ${escapeHtml(receiptNumber)}</title>
+
           <style>
             * {
               box-sizing: border-box;
@@ -127,16 +141,16 @@ export default function ReceiptModal({
 
             .logo {
               display: inline-flex;
-              width: 38px;
-              height: 38px;
+              width: 42px;
+              height: 42px;
               align-items: center;
               justify-content: center;
-              margin-bottom: 7px;
-              border-radius: 10px;
+              margin-bottom: 8px;
+              border-radius: 12px;
               background: #15803d;
-              color: #ffffff;
+              color: white;
               font-family: Arial, sans-serif;
-              font-size: 14px;
+              font-size: 15px;
               font-weight: 800;
             }
 
@@ -156,11 +170,17 @@ export default function ReceiptModal({
             .receipt-number {
               display: flex;
               justify-content: space-between;
+              gap: 8px;
               margin-bottom: 14px;
               padding: 9px;
               background: #f0fdf4;
               color: #166534;
               font-size: 11px;
+            }
+
+            .receipt-number strong {
+              overflow-wrap: anywhere;
+              text-align: right;
             }
 
             .meta p,
@@ -233,15 +253,22 @@ export default function ReceiptModal({
             }
 
             .qr {
-              width: 70px;
-              height: 70px;
               margin: 20px auto 8px;
-              border: 2px solid #111827;
-              background:
-                linear-gradient(90deg, #111827 25%, transparent 25%) 0 0 / 14px 14px,
-                linear-gradient(#111827 25%, transparent 25%) 0 0 / 14px 14px,
-                linear-gradient(90deg, transparent 50%, #111827 50%) 0 0 / 14px 14px,
-                linear-gradient(transparent 50%, #111827 50%) 0 0 / 14px 14px;
+              text-align: center;
+            }
+
+            .qr svg {
+              width: 128px;
+              height: 128px;
+            }
+
+            .qr small {
+              display: block;
+              margin-top: 8px;
+              color: #4b5563;
+              font-family: Arial, sans-serif;
+              font-size: 9px;
+              overflow-wrap: anywhere;
             }
 
             .footer {
@@ -287,6 +314,7 @@ export default function ReceiptModal({
                 <th class="right">Total</th>
               </tr>
             </thead>
+
             <tbody>
               ${printableRows}
             </tbody>
@@ -304,7 +332,10 @@ export default function ReceiptModal({
             <strong>${formatPeso(sale.totalAmount)}</strong>
           </div>
 
-          <div class="qr"></div>
+          <div class="qr">
+            ${qrImageUrl}
+            <small>Scan for return lookup</small>
+          </div>
 
           <div class="footer">
             <p><strong>Thank you for shopping with us.</strong></p>
@@ -326,7 +357,6 @@ export default function ReceiptModal({
   return (
     <div
       className="receipt-overlay"
-      role="presentation"
       onMouseDown={onClose}
     >
       <section
@@ -334,7 +364,9 @@ export default function ReceiptModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="receipt-title"
-        onMouseDown={event => event.stopPropagation()}
+        onMouseDown={event =>
+          event.stopPropagation()
+        }
       >
         <header className="receipt-dialog-header">
           <div>
@@ -353,7 +385,7 @@ export default function ReceiptModal({
             onClick={onClose}
             aria-label="Close receipt"
           >
-            ×
+            <X size={20} />
           </button>
         </header>
 
@@ -440,22 +472,17 @@ export default function ReceiptModal({
           </div>
 
           <div className="receipt-qr">
-            <div
-              className="receipt-qr-pattern"
-              aria-hidden="true"
-            >
-              {Array.from(
-                { length: 49 },
-                (_, index) => (
-                  <span key={index} />
-                )
-              )}
-            </div>
+            <QRCodeSVG
+              value={qrValue}
+              size={128}
+              level="M"
+              includeMargin
+              bgColor="#ffffff"
+              fgColor="#111827"
+            />
 
             <small>
-              QR code placeholder — receipt:
-              {' '}
-              {receiptNumber}
+              Scan for return lookup
             </small>
           </div>
 
@@ -476,6 +503,7 @@ export default function ReceiptModal({
             className="receipt-button receipt-button-secondary"
             onClick={handlePrint}
           >
+            <Printer size={17} />
             Print receipt
           </button>
 

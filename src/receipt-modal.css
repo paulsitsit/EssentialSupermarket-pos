@@ -219,27 +219,11 @@
   text-align: center;
 }
 
-.receipt-qr-pattern {
-  display: grid;
-  grid-template-columns: repeat(7, 8px);
-  gap: 3px;
-  width: max-content;
+.receipt-qr svg {
+  display: block;
+  width: 128px;
+  height: 128px;
   margin: 0 auto 9px;
-  padding: 9px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-}
-
-.receipt-qr-pattern span {
-  width: 8px;
-  height: 8px;
-  background: #172033;
-}
-
-.receipt-qr-pattern span:nth-child(2n),
-.receipt-qr-pattern span:nth-child(5n),
-.receipt-qr-pattern span:nth-child(11n) {
-  background: #ffffff;
 }
 
 .receipt-qr small {
@@ -276,8 +260,12 @@
 }
 
 .receipt-button {
+  display: inline-flex;
   flex: 1;
   min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 0;
   border-radius: 10px;
   cursor: pointer;
