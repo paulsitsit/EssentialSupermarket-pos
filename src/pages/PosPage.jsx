@@ -280,7 +280,6 @@ export default function PosPage({
       const items = cart.map(item => ({
         productId: item.productId,
         quantity: Number(item.quantity),
-        unitPrice: Number(item.price)
       }));
 
       const result = await checkout({

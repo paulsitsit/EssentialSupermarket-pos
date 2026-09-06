@@ -1,23 +1,26 @@
 import client from './client.js';
 
 function normalizeProduct(product) {
+  const price = Number(
+    product?.sellingPrice ??
+      product?.price ??
+      0
+  );
+
   return {
-    id: product._id || product.id,
-    name: product.name || 'Unnamed product',
-    brand: product.brand || '',
+    id: product?._id || product?.id,
+    name: product?.name || 'Unnamed product',
+    brand: product?.brand || '',
     category:
-      typeof product.category === 'object'
+      typeof product?.category === 'object'
         ? product.category?.name || ''
-        : product.category || '',
-    price: Number(
-      product.sellingPrice ??
-        product.price ??
-        product.costPrice ??
-        0
-    ),
-    barcode: product.barcode || '',
-    stock: Number(product.currentStock || 0),
-    unitType: product.unitType || 'piece'
+        : product?.category || '',
+    price: Number.isFinite(price)
+      ? price
+      : 0,
+    barcode: product?.barcode || '',
+    stock: Number(product?.currentStock || 0),
+    unitType: product?.unitType || 'piece'
   };
 }
 
@@ -41,7 +44,14 @@ function normalizeSale(apiData, payload) {
     items: Array.isArray(rawSale.items)
       ? rawSale.items.map(item => ({
           ...item,
-          name: item.name || 'Product',
+          name:
+            item.name ||
+            item.product?.name ||
+            'Product',
+          barcode:
+            item.barcode ||
+            item.product?.barcode ||
+            '',
           quantity: Number(item.quantity || 0),
           unitPrice: Number(item.unitPrice || 0),
           subtotal: Number(
@@ -60,7 +70,7 @@ function normalizeSale(apiData, payload) {
 
     paymentMethod:
       rawSale.paymentMethod ||
-      payload.paymentMethod ||
+      payload?.paymentMethod ||
       'cash',
 
     createdAt:
@@ -72,7 +82,10 @@ function normalizeSale(apiData, payload) {
   };
 }
 
-export async function scanBarcode(barcode, quantity = 1) {
+export async function scanBarcode(
+  barcode,
+  quantity = 1
+) {
   const code = String(barcode || '').trim();
 
   if (!code) {
@@ -87,7 +100,27 @@ export async function scanBarcode(barcode, quantity = 1) {
       `/products/scan/${encodeURIComponent(code)}`
     );
 
-    const product = normalizeProduct(response.data);
+    const product = normalizeProduct(
+      response.data
+    );
+
+    if (!product.id) {
+      return {
+        success: false,
+        error:
+          'The scanned product is missing a valid product ID.'
+      };
+    }
+
+    if (
+      !Number.isFinite(product.price) ||
+      product.price <= 0
+    ) {
+      return {
+        success: false,
+        error: `${product.name} does not have a valid selling price. Ask an Admin or Manager to update the product price in the Inventory System.`
+      };
+    }
 
     if (product.stock <= 0) {
       return {
@@ -115,23 +148,6 @@ export async function scanBarcode(barcode, quantity = 1) {
   }
 }
 
-/*
- * Expected backend response:
- *
- * {
- *   message: 'Sale completed successfully',
- *   receiptNumber: 'ES-MAIN-20260905-000004',
- *   sale: {
- *     _id: '...',
- *     receiptNumber: 'ES-MAIN-20260905-000004',
- *     items: [...],
- *     totalAmount: 64,
- *     paymentMethod: 'cash',
- *     createdAt: '...'
- *   },
- *   movements: [...]
- * }
- */
 export async function checkout(payload) {
   if (
     !payload ||
@@ -144,15 +160,29 @@ export async function checkout(payload) {
     };
   }
 
+  /*
+   * Send only the IDs and requested quantities.
+   * The backend retrieves the trusted retail price
+   * from the Product document.
+   */
+  const cleanPayload = {
+    paymentMethod:
+      payload.paymentMethod || 'cash',
+    items: payload.items.map(item => ({
+      productId: item.productId,
+      quantity: Number(item.quantity)
+    }))
+  };
+
   try {
     const response = await client.post(
       '/sales',
-      payload
+      cleanPayload
     );
 
     const sale = normalizeSale(
       response.data,
-      payload
+      cleanPayload
     );
 
     if (!sale.receiptNumber) {
@@ -168,6 +198,17 @@ export async function checkout(payload) {
         success: false,
         error:
           'Sale completed, but the server did not return the sold items for the receipt.'
+      };
+    }
+
+    if (
+      !Number.isFinite(sale.totalAmount) ||
+      sale.totalAmount <= 0
+    ) {
+      return {
+        success: false,
+        error:
+          'Sale completed, but the server returned an invalid total. Please contact an Admin or Manager.'
       };
     }
 
