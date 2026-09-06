@@ -483,16 +483,6 @@ export default function ReceiptPage({
   const [downloading, setDownloading] =
     useState(false);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      window.print();
-    }, 400);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, []);
-
   if (!sale) {
     return null;
   }
