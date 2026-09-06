@@ -15,11 +15,86 @@ import {
   logout
 } from './api/auth';
 
+function getSavedSale() {
+  try {
+    const savedSale = sessionStorage.getItem(
+      'pos_last_sale'
+    );
+
+    if (!savedSale) {
+      return null;
+    }
+
+    const sale = JSON.parse(savedSale);
+
+    if (
+      !sale ||
+      !sale.receiptNumber ||
+      !Array.isArray(sale.items) ||
+      sale.items.length === 0
+    ) {
+      sessionStorage.removeItem('pos_last_sale');
+      return null;
+    }
+
+    return sale;
+  } catch {
+    sessionStorage.removeItem('pos_last_sale');
+    return null;
+  }
+}
+
 function PosRoutes({
   user,
   onLogout
 }) {
   const navigate = useNavigate();
+
+  function handleCheckoutSuccess(result) {
+    /*
+     * PosPage currently calls onCheckoutSuccess with:
+     *
+     * {
+     *   sale: completedSale,
+     *   receiptNumber: completedSale.receiptNumber
+     * }
+     *
+     * Support both that object and a direct sale object,
+     * so this remains safe if the POS page changes later.
+     */
+    const sale = result?.sale || result;
+
+    if (
+      !sale ||
+      !sale.receiptNumber ||
+      !Array.isArray(sale.items) ||
+      sale.items.length === 0
+    ) {
+      console.error(
+        'Cannot open receipt: incomplete sale data.',
+        result
+      );
+
+      return;
+    }
+
+    sessionStorage.setItem(
+      'pos_last_sale',
+      JSON.stringify(sale)
+    );
+
+    navigate('/receipt');
+  }
+
+  function handleReceiptBack() {
+    sessionStorage.removeItem('pos_last_sale');
+
+    navigate('/', {
+      replace: true
+    });
+  }
+
+  const savedSale = getSavedSale();
 
   return (
     <Routes>
@@ -29,14 +104,9 @@ function PosRoutes({
           <PosPage
             user={user}
             onLogout={onLogout}
-            onCheckoutSuccess={sale => {
-              sessionStorage.setItem(
-                'pos_last_sale',
-                JSON.stringify(sale)
-              );
-
-              navigate('/receipt');
-            }}
+            onCheckoutSuccess={
+              handleCheckoutSuccess
+            }
           />
         }
       />
@@ -44,25 +114,17 @@ function PosRoutes({
       <Route
         path="/receipt"
         element={
-          <ReceiptPage
-            sale={(() => {
-              const savedSale =
-                sessionStorage.getItem(
-                  'pos_last_sale'
-                );
-
-              return savedSale
-                ? JSON.parse(savedSale)
-                : null;
-            })()}
-            onBack={() => {
-              sessionStorage.removeItem(
-                'pos_last_sale'
-              );
-
-              navigate('/');
-            }}
-          />
+          savedSale ? (
+            <ReceiptPage
+              sale={savedSale}
+              onBack={handleReceiptBack}
+            />
+          ) : (
+            <Navigate
+              to="/"
+              replace
+            />
+          )
         }
       />
 
@@ -89,7 +151,10 @@ export default function App() {
   }
 
   function handleLogout() {
+    sessionStorage.removeItem('pos_last_sale');
+
     logout();
+
     setUser(null);
   }
 
